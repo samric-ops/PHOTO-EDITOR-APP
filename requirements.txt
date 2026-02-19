@@ -1,2 +1,7 @@
-streamlit
-pillow
+streamlit==1.28.1
+pillow==10.1.0
+numpy==1.24.3
+opencv-python-headless==4.8.1.78
+rembg==2.0.56
+onnxruntime==1.15.1
+protobuf==3.20.3
