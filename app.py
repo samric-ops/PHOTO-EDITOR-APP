@@ -1,107 +1,157 @@
 import streamlit as st
-from PIL import Image
-import numpy as np
-import cv2
+from PIL import Image, ImageDraw, ImageFont
 import io
 
-st.set_page_config(page_title="ID Photo Editor", page_icon="📸", layout="wide")
+st.set_page_config(
+    page_title="ID Photo Editor",
+    page_icon="📸",
+    layout="wide"
+)
 
-# Title
+# Custom CSS
 st.markdown("""
-<h1 style='text-align: center; color: #1E88E5;'>
-    📸 ID Photo Editor Pro
-</h1>
+<style>
+    .main-title {
+        text-align: center;
+        color: #1E88E5;
+        font-size: 3rem;
+        margin-bottom: 2rem;
+    }
+    .feature-box {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 10px;
+        border-left: 4px solid #1E88E5;
+        margin: 1rem 0;
+    }
+    .success-box {
+        background: #d4edda;
+        color: #155724;
+        padding: 1rem;
+        border-radius: 5px;
+        text-align: center;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'processed' not in st.session_state:
-    st.session_state.processed = None
+st.markdown("<h1 class='main-title'>📸 ID Photo Editor</h1>", unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
-    st.header("📤 Upload")
-    uploaded_file = st.file_uploader("Choose photo", type=['jpg', 'jpeg', 'png'])
+    st.image("https://via.placeholder.com/300x100/1E88E5/ffffff?text=ID+Photo+Editor", use_column_width=True)
+    st.markdown("---")
+    
+    st.markdown("### 📤 Upload Photo")
+    uploaded_file = st.file_uploader(
+        "Choose a photo (JPG/PNG)",
+        type=['jpg', 'jpeg', 'png']
+    )
     
     if uploaded_file:
-        st.success("✅ Uploaded!")
+        st.success("✅ Photo uploaded!")
+        st.markdown("---")
         
-        st.header("🎨 Settings")
+        st.markdown("### 🎨 Edit Options")
         
-        # Background
-        bg_option = st.checkbox("Change Background", value=True)
-        if bg_option:
-            bg_color = st.color_picker("Pick color", "#FFFFFF")
+        # Background color
+        bg_color = st.color_picker("Background Color", "#FFFFFF")
         
-        # Size
-        size_option = st.selectbox(
-            "Photo Size",
-            ["Passport (2x2)", "1x1", "2x2", "Wallet"]
-        )
+        # Size selection
+        size_options = {
+            "Passport (2x2 inch)": (600, 600),
+            "1x1 inch": (300, 300),
+            "2x2 inch": (600, 600),
+            "PDS (Personal Data Sheet)": (450, 450)
+        }
+        selected_size = st.selectbox("Photo Size", list(size_options.keys()))
+        
+        # Add name
+        add_name = st.checkbox("Add Name")
+        if add_name:
+            name_text = st.text_input("Full Name")
+            name_color = st.color_picker("Name Color", "#000000")
         
         # Process button
-        if st.button("✨ PROCESS", type="primary", use_container_width=True):
-            st.session_state.processed = True
+        process_btn = st.button(
+            "✨ PROCESS PHOTO",
+            type="primary",
+            use_container_width=True
+        )
 
 # Main content
 if uploaded_file:
-    # Load image
-    image = Image.open(uploaded_file)
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
+    # Open image
+    original_image = Image.open(uploaded_file)
+    
+    # Convert to RGB if necessary
+    if original_image.mode != 'RGB':
+        original_image = original_image.convert('RGB')
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📷 Original")
-        st.image(image, use_column_width=True)
-        st.caption(f"Size: {image.size[0]} x {image.size[1]}")
+        st.markdown("### 📷 Original")
+        st.image(original_image, use_column_width=True)
+        st.caption(f"Size: {original_image.size[0]} x {original_image.size[1]}")
     
     with col2:
-        st.subheader("✨ Result")
+        st.markdown("### ✨ Processed")
         
-        if st.session_state.processed:
-            with st.spinner("Processing..."):
-                # Convert to numpy
-                img_array = np.array(image)
-                h, w = img_array.shape[:2]
+        if process_btn:
+            with st.spinner("🔄 Processing..."):
+                # Create a copy
+                processed = original_image.copy()
                 
-                # Change background
-                if bg_option:
-                    # Convert hex to RGB
-                    bg = tuple(int(bg_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                    # Create solid background
-                    background = np.full((h, w, 3), bg, dtype=np.uint8)
-                    # Blend (simple version)
-                    img_array = cv2.addWeighted(img_array, 0.9, background, 0.1, 0)
+                # Resize first
+                target_size = size_options[selected_size]
+                processed = processed.resize(target_size, Image.Resampling.LANCZOS)
                 
-                # Resize based on selection
-                if size_option == "Passport (2x2)":
-                    new_size = (600, 600)
-                elif size_option == "1x1":
-                    new_size = (300, 300)
-                elif size_option == "2x2":
-                    new_size = (600, 600)
-                else:  # Wallet
-                    new_size = (750, 1050)
+                # Create a new image with background color
+                if bg_color != "#FFFFFF":
+                    # Create colored background
+                    colored_bg = Image.new('RGB', processed.size, bg_color)
+                    
+                    # Paste processed image on colored background
+                    # For now, just blend by creating a new image
+                    # This is a simple effect without actual background removal
+                    processed = Image.blend(colored_bg, processed, 0.9)
                 
-                img_array = cv2.resize(img_array, new_size, interpolation=cv2.INTER_CUBIC)
+                # Add name if provided
+                if add_name and name_text:
+                    draw = ImageDraw.Draw(processed)
+                    
+                    # Try to use a font
+                    try:
+                        font = ImageFont.truetype("arial.ttf", 20)
+                    except:
+                        font = ImageFont.load_default()
+                    
+                    # Get text size
+                    text_bbox = draw.textbbox((0, 0), name_text, font=font)
+                    text_width = text_bbox[2] - text_bbox[0]
+                    
+                    # Position at bottom
+                    x = (processed.width - text_width) // 2
+                    y = processed.height - 40
+                    
+                    # Draw text
+                    draw.text((x, y), name_text, font=font, fill=name_color)
                 
-                # Convert back to PIL
-                result = Image.fromarray(img_array)
-                st.session_state.result_img = result
-                
+                # Save to session state
+                st.session_state['processed'] = processed
                 st.success("✅ Done!")
         
-        # Display result
-        if 'result_img' in st.session_state:
-            st.image(st.session_state.result_img, use_column_width=True)
-            st.caption(f"Size: {st.session_state.result_img.size[0]} x {st.session_state.result_img.size[1]}")
+        # Display processed image
+        if 'processed' in st.session_state:
+            st.image(st.session_state['processed'], use_column_width=True)
+            st.caption(f"Size: {st.session_state['processed'].size[0]} x {st.session_state['processed'].size[1]}")
             
-            # Download
+            # Download button
             buf = io.BytesIO()
-            st.session_state.result_img.save(buf, format='PNG', dpi=(300, 300))
+            st.session_state['processed'].save(buf, format='PNG', dpi=(300, 300))
             buf.seek(0)
             
+            st.markdown("---")
             st.download_button(
                 "📥 Download HD Photo",
                 data=buf,
@@ -109,18 +159,46 @@ if uploaded_file:
                 mime="image/png",
                 use_container_width=True
             )
+            
+            st.markdown("""
+            <div class='success-box'>
+                ✅ HD Quality (300 DPI) - Ready for printing
+            </div>
+            """, unsafe_allow_html=True)
+
 else:
-    # Welcome
-    st.info("👆 Upload a photo to start editing")
-    
-    # Features
+    # Welcome screen
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        st.markdown("### 🎨 Background")
-        st.write("Change background color")
+        st.markdown("""
+        <div class='feature-box'>
+            <h3>🎨 Background</h3>
+            <p>Change background color easily</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col2:
-        st.markdown("### 📏 Sizes")
-        st.write("Passport, 1x1, 2x2, Wallet")
+        st.markdown("""
+        <div class='feature-box'>
+            <h3>📏 Standard Sizes</h3>
+            <p>Passport, 1x1, 2x2, PDS</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col3:
-        st.markdown("### 💾 HD Output")
-        st.write("300 DPI print ready")
+        st.markdown("""
+        <div class='feature-box'>
+            <h3>📝 Add Name</h3>
+            <p>Perfect for official documents</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.info("👆 Upload a photo from the sidebar to get started!")
+
+# Footer
+st.markdown("---")
+st.markdown(
+    "<p style='text-align: center; color: gray;'>Made with ❤️ using Streamlit</p>",
+    unsafe_allow_html=True
+)
