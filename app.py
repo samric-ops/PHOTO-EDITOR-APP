@@ -1,7 +1,8 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 import io
 
+# Must be the first Streamlit command
 st.set_page_config(
     page_title="ID Photo Editor",
     page_icon="📸",
@@ -11,194 +12,161 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    .main-title {
+    .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .main-header {
+        background: white;
+        padding: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         text-align: center;
-        color: #1E88E5;
-        font-size: 3rem;
         margin-bottom: 2rem;
     }
-    .feature-box {
-        background: #f8f9fa;
-        padding: 1.5rem;
+    .upload-box {
+        background: white;
+        padding: 2rem;
         border-radius: 10px;
-        border-left: 4px solid #1E88E5;
-        margin: 1rem 0;
-    }
-    .success-box {
-        background: #d4edda;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 5px;
-        text-align: center;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='main-title'>📸 ID Photo Editor</h1>", unsafe_allow_html=True)
+# Header
+st.markdown("""
+<div class="main-header">
+    <h1 style="color: #667eea; margin:0;">📸 ID Photo Editor Pro</h1>
+    <p style="color: #666;">Create professional ID photos in seconds</p>
+</div>
+""", unsafe_allow_html=True)
 
-# Sidebar
-with st.sidebar:
-    st.image("https://via.placeholder.com/300x100/1E88E5/ffffff?text=ID+Photo+Editor", use_column_width=True)
-    st.markdown("---")
-    
+# Initialize session state
+if 'processed' not in st.session_state:
+    st.session_state.processed = None
+
+# Layout
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.markdown('<div class="upload-box">', unsafe_allow_html=True)
     st.markdown("### 📤 Upload Photo")
+    
     uploaded_file = st.file_uploader(
-        "Choose a photo (JPG/PNG)",
-        type=['jpg', 'jpeg', 'png']
+        "Choose a photo (JPG, PNG)",
+        type=['jpg', 'jpeg', 'png'],
+        key='uploader'
     )
     
     if uploaded_file:
-        st.success("✅ Photo uploaded!")
-        st.markdown("---")
+        # Load image
+        image = Image.open(uploaded_file)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
         
+        # Display original
+        st.markdown("#### Original")
+        st.image(image, use_column_width=True)
+        
+        # Save to session
+        st.session_state.original = image
+        
+        # Edit options
+        st.markdown("---")
         st.markdown("### 🎨 Edit Options")
         
-        # Background color
         bg_color = st.color_picker("Background Color", "#FFFFFF")
         
-        # Size selection
-        size_options = {
-            "Passport (2x2 inch)": (600, 600),
-            "1x1 inch": (300, 300),
-            "2x2 inch": (600, 600),
-            "PDS (Personal Data Sheet)": (450, 450)
+        size_map = {
+            "Passport (2x2)": (600, 600),
+            "1x1": (300, 300),
+            "2x2": (600, 600),
+            "PDS": (450, 450)
         }
-        selected_size = st.selectbox("Photo Size", list(size_options.keys()))
+        selected_size = st.selectbox("Photo Size", list(size_map.keys()))
         
-        # Add name
         add_name = st.checkbox("Add Name")
         if add_name:
-            name_text = st.text_input("Full Name")
-            name_color = st.color_picker("Name Color", "#000000")
+            name = st.text_input("Full Name")
         
         # Process button
-        process_btn = st.button(
-            "✨ PROCESS PHOTO",
-            type="primary",
-            use_container_width=True
-        )
-
-# Main content
-if uploaded_file:
-    # Open image
-    original_image = Image.open(uploaded_file)
-    
-    # Convert to RGB if necessary
-    if original_image.mode != 'RGB':
-        original_image = original_image.convert('RGB')
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 📷 Original")
-        st.image(original_image, use_column_width=True)
-        st.caption(f"Size: {original_image.size[0]} x {original_image.size[1]}")
-    
-    with col2:
-        st.markdown("### ✨ Processed")
-        
-        if process_btn:
-            with st.spinner("🔄 Processing..."):
-                # Create a copy
-                processed = original_image.copy()
+        if st.button("✨ PROCESS PHOTO", type="primary", use_container_width=True):
+            with st.spinner("Processing..."):
+                # Create copy
+                processed = image.copy()
                 
-                # Resize first
-                target_size = size_options[selected_size]
+                # Resize
+                target_size = size_map[selected_size]
                 processed = processed.resize(target_size, Image.Resampling.LANCZOS)
                 
-                # Create a new image with background color
+                # Add background color effect
                 if bg_color != "#FFFFFF":
-                    # Create colored background
-                    colored_bg = Image.new('RGB', processed.size, bg_color)
-                    
-                    # Paste processed image on colored background
-                    # For now, just blend by creating a new image
-                    # This is a simple effect without actual background removal
-                    processed = Image.blend(colored_bg, processed, 0.9)
+                    # Create colored overlay
+                    overlay = Image.new('RGB', processed.size, bg_color)
+                    # Blend
+                    processed = Image.blend(overlay, processed, 0.9)
                 
-                # Add name if provided
-                if add_name and name_text:
+                # Add name
+                if add_name and name:
                     draw = ImageDraw.Draw(processed)
-                    
-                    # Try to use a font
-                    try:
-                        font = ImageFont.truetype("arial.ttf", 20)
-                    except:
-                        font = ImageFont.load_default()
-                    
-                    # Get text size
-                    text_bbox = draw.textbbox((0, 0), name_text, font=font)
-                    text_width = text_bbox[2] - text_bbox[0]
-                    
-                    # Position at bottom
-                    x = (processed.width - text_width) // 2
-                    y = processed.height - 40
-                    
-                    # Draw text
-                    draw.text((x, y), name_text, font=font, fill=name_color)
+                    # Simple text
+                    w, h = processed.size
+                    draw.text((w//2 - 50, h-40), name, fill='black')
                 
-                # Save to session state
-                st.session_state['processed'] = processed
+                st.session_state.processed = processed
                 st.success("✅ Done!")
         
-        # Display processed image
-        if 'processed' in st.session_state:
-            st.image(st.session_state['processed'], use_column_width=True)
-            st.caption(f"Size: {st.session_state['processed'].size[0]} x {st.session_state['processed'].size[1]}")
-            
-            # Download button
-            buf = io.BytesIO()
-            st.session_state['processed'].save(buf, format='PNG', dpi=(300, 300))
-            buf.seek(0)
-            
-            st.markdown("---")
-            st.download_button(
-                "📥 Download HD Photo",
-                data=buf,
-                file_name="id_photo.png",
-                mime="image/png",
-                use_container_width=True
-            )
-            
-            st.markdown("""
-            <div class='success-box'>
-                ✅ HD Quality (300 DPI) - Ready for printing
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-else:
-    # Welcome screen
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
+with col2:
+    if st.session_state.processed:
+        st.markdown('<div class="upload-box">', unsafe_allow_html=True)
+        st.markdown("### ✨ Processed Photo")
+        st.image(st.session_state.processed, use_column_width=True)
+        
+        # Download
+        buf = io.BytesIO()
+        st.session_state.processed.save(buf, format='PNG', dpi=(300, 300))
+        buf.seek(0)
+        
+        st.download_button(
+            "📥 Download HD Photo",
+            data=buf,
+            file_name="id_photo.png",
+            mime="image/png",
+            use_container_width=True
+        )
+        
+        st.info("✅ HD Quality - 300 DPI")
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="upload-box">', unsafe_allow_html=True)
         st.markdown("""
-        <div class='feature-box'>
-            <h3>🎨 Background</h3>
-            <p>Change background color easily</p>
+        <div style="text-align: center; padding: 3rem;">
+            <h3>✨ Your edited photo will appear here</h3>
+            <p>Upload and process a photo to get started</p>
         </div>
         """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div class='feature-box'>
-            <h3>📏 Standard Sizes</h3>
-            <p>Passport, 1x1, 2x2, PDS</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div class='feature-box'>
-            <h3>📝 Add Name</h3>
-            <p>Perfect for official documents</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.info("👆 Upload a photo from the sidebar to get started!")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# Footer
+# Features
 st.markdown("---")
-st.markdown(
-    "<p style='text-align: center; color: gray;'>Made with ❤️ using Streamlit</p>",
-    unsafe_allow_html=True
-)
+st.markdown("""
+<div style="display: flex; justify-content: space-around; background: white; padding: 2rem; border-radius: 10px; margin-top: 2rem;">
+    <div style="text-align: center;">
+        <h3>🎨</h3>
+        <p>Background Color</p>
+    </div>
+    <div style="text-align: center;">
+        <h3>📏</h3>
+        <p>Standard Sizes</p>
+    </div>
+    <div style="text-align: center;">
+        <h3>📝</h3>
+        <p>Add Name</p>
+    </div>
+    <div style="text-align: center;">
+        <h3>💾</h3>
+        <p>HD Download</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
